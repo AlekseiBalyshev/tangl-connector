@@ -155,6 +155,8 @@ class Client:
                 self.ensure_token()
                 continue
             break
+        if resp.status_code == 401 and self.mode == "token":
+            raise TanglError("HTTP 401: персональный токен не принят (истёк или удалён)")
         if resp.status_code >= 400:
             raise TanglError(f"GET {endpoint} -> HTTP {resp.status_code}")
         if raw:

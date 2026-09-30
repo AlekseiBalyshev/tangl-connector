@@ -59,11 +59,11 @@ python <папка скилла>/tangl.py <инструмент> [аргумен
 
 ```bash
 python tangl.py login --file /mnt/user-data/uploads/tangl.env
-printf '%s\n' 'TANGL_CLIENT_ID=…' 'TANGL_CLIENT_SECRET=…' … | python tangl.py login
+printf '%s\n' 'TANGL_TOKEN=…' | python tangl.py login
 ```
 
-Ключи: `TANGL_CLIENT_ID`, `TANGL_CLIENT_SECRET`, `TANGL_USERNAME`,
-`TANGL_PASSWORD` либо один `TANGL_TOKEN`. Необязательный `TANGL_COMPANY_ID`
+Ключи: `TANGL_TOKEN` (персональный токен Tangl) либо `TANGL_CLIENT_ID`,
+`TANGL_CLIENT_SECRET`, `TANGL_USERNAME`, `TANGL_PASSWORD`. Необязательный `TANGL_COMPANY_ID`
 ограничивает поиск одной компанией. Не пересказывай значения пользователю.
 
 ### `find_models`

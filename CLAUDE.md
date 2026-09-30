@@ -8,7 +8,8 @@
 - `tangl.py` – точка входа, `python tangl.py <инструмент>`.
 - `tangl_connector/config.py` – данные для входа: окружение → `~/.tangl-connector/credentials.env` → `.env`/`tangl.env` → файлы в `/mnt/user-data/uploads`.
 - `tangl_connector/client.py` – вход (token / password / client_credentials), `ReadOnlySession`: наружу только GET, кроме `/connect/token`.
-- `tangl_connector/meta.py` – tangl-meta → плоская таблица `elements` (RefIdx раскрываются) → parquet-кэш в `~/.tangl-connector/cache`.
+- `tangl_connector/meta.py` – tangl-meta → таблицы `elements` (RefIdx раскрываются, признак `service`) и `materials` (класс бетона из названия) → parquet-кэш в `~/.tangl-connector/cache`. До выгрузки – проверка размера (`TANGL_MAX_ELEMENTS`, по умолчанию 200 000; замеры в README).
+- `Client.version_info` – индекс версий `cache/versions_*.json` для строки-источника и проверки размера.
 - `tangl_connector/tools.py` – инструменты. DuckDB без доступа к файлам (`enable_external_access=false`).
 
 ## Факты API

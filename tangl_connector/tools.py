@@ -11,8 +11,17 @@ from .client import Client, TanglError
 MAX_ROWS = 5000
 
 
+def _endpoints(cfg: dict) -> list:
+    out = set()
+    for key in ("TANGL_AUTH_URL", "TANGL_API_URL"):
+        u = urlparse(cfg.get(key) or "")
+        if u.hostname:
+            out.add((u.hostname, u.port or (80 if u.scheme == "http" else 443)))
+    return sorted(out)
+
+
 def _hosts(cfg: dict) -> list:
-    return sorted({urlparse(cfg[k]).hostname for k in ("TANGL_AUTH_URL", "TANGL_API_URL") if cfg.get(k)})
+    return sorted({h for h, _ in _endpoints(cfg)})
 
 
 def status() -> dict:
@@ -25,9 +34,9 @@ def status() -> dict:
     except ImportError:
         out["duckdb_ok"] = False
         out["hints"].append("Не установлен пакет duckdb: выполни `pip install duckdb`.")
-    for host in _hosts(cfg):
+    for host, port in _endpoints(cfg):
         try:
-            socket.create_connection((host, 443), timeout=8).close()
+            socket.create_connection((host, port), timeout=8).close()
         except OSError:
             out["network_ok"] = False
     if not out["network_ok"]:
@@ -126,6 +135,10 @@ def find_models(query="", company="", versions="latest", sw="", uploader="",
         except TanglError:
             continue
         scanned += len(models)
+        entries = {}
+        for m in models:
+            entries.update(c.index_entries(m, names.get(cid, cid)))
+        c.save_index(entries)
         for m in models:
             if m.get("isDeleted"):
                 continue
@@ -204,10 +217,17 @@ def model_schema(version_id: str, category: str = "", top: int = 200) -> dict:
          "example": examples.get(k)}
         for k, n in filled.most_common(top)
     ]
+    mwhere = where.replace("category", "m.category") if where else ""
+    materials = con.execute(
+        f"SELECT material, any_value(concrete_class), count(DISTINCT id) n, round(sum(volume), 3) "
+        f"FROM materials m {mwhere} GROUP BY 1 ORDER BY 4 DESC NULLS LAST LIMIT 30", params).fetchall()
     return {
+        "source": source(c, version_id),
         "version_id": version_id,
         "category_filter": category or None,
         "elements": total,
+        "service_elements": con.execute(f"SELECT count(*) FROM elements {where + (' AND' if where else 'WHERE')} service", params).fetchone()[0],
+        "materials": [{"material": a, "concrete_class": k, "elements": n, "volume_m3": v} for a, k, n, v in materials],
         "categories": [{"category": a, "elements": b, "volume_m3": v, "area_m2": s} for a, b, v, s in cats],
         "levels": [{"level": a, "elevation": b, "elements": n} for a, b, n in levels],
         "parameters_total": len(filled),
@@ -253,13 +273,37 @@ def query(version_id: str, sql: str, compare: str = "", limit: int = 1000) -> di
     except Exception as e:
         return {"error": str(e).splitlines()[0], "sql": sql}
     truncated = len(rows) > limit
-    out = {"version_id": version_id, "columns": cols, "row_count": min(len(rows), limit),
-           "truncated": truncated, "rows": rows[:limit]}
+    out = {"source": source(c, version_id), "version_id": version_id, "columns": cols,
+           "row_count": min(len(rows), limit), "truncated": truncated, "rows": rows[:limit]}
     if compare:
-        out["compare_version_id"] = compare
+        out["compare_source"] = source(c, compare)
     if truncated:
         out["note"] = f"Показаны первые {limit} строк. Сузь запрос или агрегируй."
     return out
+
+
+def source(c: Client, version_id: str) -> dict:
+    info = c.version_info(version_id)
+    date = str(info.get("date") or "")[:10]
+    line = f"модель «{info.get('model') or '?'}», версия {info.get('version') or '?'}"
+    if date:
+        line += f" от {date}"
+    return {"model": info.get("model"), "version": info.get("version"), "date": date or None,
+            "version_id": version_id, "text": line}
+
+
+def clean(everything: bool = False) -> dict:
+    removed = []
+    if config.CACHE_DIR.exists():
+        for f in config.CACHE_DIR.iterdir():
+            if f.is_file():
+                removed.append(f.name)
+                f.unlink()
+    if everything and config.CREDENTIALS_FILE.exists():
+        config.CREDENTIALS_FILE.unlink()
+        removed.append(config.CREDENTIALS_FILE.name)
+    return {"removed_files": len(removed), "credentials_removed": everything and config.CREDENTIALS_FILE.name in removed,
+            "folder": str(config.HOME_DIR)}
 
 
 def model_link(version_id: str) -> dict:

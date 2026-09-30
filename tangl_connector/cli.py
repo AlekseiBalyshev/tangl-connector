@@ -3,6 +3,7 @@ import sys
 
 from . import tools
 from .client import TanglError
+from .meta import ModelTooLarge
 
 
 def build_parser():
@@ -38,6 +39,9 @@ def build_parser():
     s.add_argument("--compare", default="")
     s.add_argument("--limit", type=int, default=1000)
 
+    s = sub.add_parser("clean")
+    s.add_argument("--all", action="store_true", dest="everything")
+
     s = sub.add_parser("model_link")
     s.add_argument("version_id")
     return p
@@ -63,9 +67,11 @@ def run(argv=None) -> int:
             elif sql == "-":
                 sql = sys.stdin.read()
             out = tools.query(a.version_id, sql, a.compare, a.limit)
+        elif a.tool == "clean":
+            out = tools.clean(a.everything)
         else:
             out = tools.model_link(a.version_id)
-    except TanglError as e:
+    except (TanglError, ModelTooLarge) as e:
         out = {"error": str(e)}
     tools.emit(out, a.output_file)
     return 1 if isinstance(out, dict) and "error" in out else 0

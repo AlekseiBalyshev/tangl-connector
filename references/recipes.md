@@ -26,25 +26,40 @@ WHERE category IN ('Стены', 'Перекрытия')
 GROUP BY 1, 2 ORDER BY any_value(level_elevation), 2
 ```
 
-Объём по значению параметра (например, марке бетона):
+Бетон по этажам и классам (класс – из названия материала):
 
 ```sql
-SELECT json_extract_string(pars, '$."Марка бетона"') grade,
-       count(*) n, round(sum(total_volume), 2) volume_m3
-FROM elements
-WHERE category IN ('Стены', 'Перекрытия')
-GROUP BY 1 ORDER BY volume_m3 DESC
+SELECT level_name, category, concrete_class, round(sum(volume), 2) volume_m3
+FROM materials
+WHERE category IN ('Стены', 'Перекрытия') AND concrete_class IS NOT NULL
+GROUP BY ALL ORDER BY any_value(level_elevation), category, concrete_class
+```
+
+Все материалы с объёмами:
+
+```sql
+SELECT material, count(DISTINCT id) elements, round(sum(volume), 2) volume_m3
+FROM materials GROUP BY 1 ORDER BY volume_m3 DESC NULLS LAST
 ```
 
 ## Заполнение параметров
 
-Пустой параметр по категориям:
+Пустой параметр по категориям (служебные элементы исключены):
 
 ```sql
 SELECT category, type, count(*) n
 FROM elements
-WHERE coalesce(json_extract_string(pars, '$."Код по классификатору"'), '') = ''
+WHERE NOT service
+  AND coalesce(json_extract_string(pars, '$."Код по классификатору"'), '') = ''
 GROUP BY 1, 2 ORDER BY n DESC
+```
+
+Доля заполнения:
+
+```sql
+SELECT count(*) total,
+       count(*) FILTER (WHERE coalesce(json_extract_string(pars, '$."Код по классификатору"'), '') = '') empty
+FROM elements WHERE NOT service
 ```
 
 Список элементов для исправления:
@@ -52,7 +67,8 @@ GROUP BY 1, 2 ORDER BY n DESC
 ```sql
 SELECT id, category, type, level_name
 FROM elements
-WHERE coalesce(json_extract_string(pars, '$."Код по классификатору"'), '') = ''
+WHERE NOT service
+  AND coalesce(json_extract_string(pars, '$."Код по классификатору"'), '') = ''
 ORDER BY category, type
 ```
 
@@ -73,7 +89,7 @@ WHERE category = 'Стены'
 
 ```sql
 SELECT type, level_name, bbox_bottom, bbox_top, count(*) n, list(id) ids
-FROM elements
+FROM elements WHERE NOT service
 GROUP BY ALL HAVING count(*) > 1 ORDER BY n DESC
 ```
 
@@ -93,6 +109,8 @@ GROUP BY 1 ORDER BY any_value(level_elevation)
 ```
 
 ## Сравнение версий (`--compare <старая версия>`)
+
+Надёжно только для моделей из Revit.
 
 Сводка изменений:
 
@@ -127,4 +145,15 @@ SELECT coalesce(e.category, p.category) category,
        round(sum(coalesce(p.total_volume, 0)), 2) old_m3
 FROM elements e FULL OUTER JOIN prev p ON e.id = p.id
 GROUP BY 1 HAVING new_m3 <> old_m3 ORDER BY 1
+```
+
+Изменение объёма бетона по классам:
+
+```sql
+SELECT coalesce(n.concrete_class, o.concrete_class) concrete_class,
+       round(coalesce(n.v, 0), 2) new_m3, round(coalesce(o.v, 0), 2) old_m3
+FROM (SELECT concrete_class, sum(volume) v FROM materials WHERE concrete_class IS NOT NULL GROUP BY 1) n
+FULL OUTER JOIN (SELECT concrete_class, sum(volume) v FROM prev_materials WHERE concrete_class IS NOT NULL GROUP BY 1) o
+  USING (concrete_class)
+ORDER BY 1
 ```

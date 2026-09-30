@@ -115,7 +115,7 @@ def build_pdf(version: str, out: Path):
         print("markdown-pdf not installed, PDF skipped (pip install markdown-pdf)", file=sys.stderr)
         return None
     text = (ROOT / "USER_GUIDE.md").read_text(encoding="utf-8")
-    text = text.replace("](../../releases)", "](https://github.com/AlekseiBalyshev/tangl-connector/releases)")
+    text = text.replace("](../../releases", "](https://github.com/AlekseiBalyshev/tangl-connector/releases")
     pdf = MarkdownPdf(toc_level=2)
     pdf.add_section(Section(text))
     pdf.meta["title"] = "Tangl Connector – руководство пользователя"

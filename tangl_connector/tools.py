@@ -40,14 +40,19 @@ def status() -> dict:
     elif out["network_ok"]:
         c = Client(cfg)
         if c.authenticate():
-            out["auth_ok"] = True
             try:
                 out["companies"] = [
                     {"id": x.get("id"), "name": x.get("name"), "personal": bool(x.get("isPersonal"))}
                     for x in c.companies()
                 ]
-            except TanglError:
-                out["companies"] = [{"id": i} for i in c.company_ids()]
+                out["auth_ok"] = True
+            except TanglError as e:
+                if "401" in str(e) or "403" in str(e):
+                    out["auth_error"] = str(e)
+                    out["hints"].append(_auth_hint(mode, "rejected"))
+                else:
+                    out["auth_ok"] = True
+                    out["companies"] = [{"id": i} for i in c.company_ids()]
         else:
             out["auth_error"] = c.last_error
             out["hints"].append(_auth_hint(mode, c.last_error))
@@ -64,7 +69,8 @@ def _auth_hint(mode: str, error: str) -> str:
     if error in ("invalid_client",):
         return "Неверные TANGL_CLIENT_ID / TANGL_CLIENT_SECRET."
     if mode == "token":
-        return "Токен не принят: проверь, что он не истёк и не отозван."
+        return ("Персональный токен не принят: он истёк или удалён. Попроси пользователя создать "
+                "новый в Tangl (раздел «Персональные токены») и вызови `login`.")
     return f"Не удалось войти в Tangl: {error}."
 
 

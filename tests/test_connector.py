@@ -140,3 +140,17 @@ def test_token_mode_no_network(home, monkeypatch):
     monkeypatch.setenv("TANGL_TOKEN", "Bearer abc")
     c = Client()
     assert c.authenticate() and c.token == "abc"
+
+
+def test_status_rejects_bad_token(home, monkeypatch):
+    import socket
+
+    class Resp:
+        status_code, content, headers = 401, b"", {}
+
+    monkeypatch.setenv("TANGL_TOKEN", "bad")
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: type("S", (), {"close": lambda self: None})())
+    monkeypatch.setattr(ReadOnlySession, "get", lambda self, *a, **k: Resp())
+    s = tools.status()
+    assert s["auth_ok"] is False and not s["all_ok"]
+    assert any("Персональные токены" in h for h in s["hints"])

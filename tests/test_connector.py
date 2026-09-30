@@ -11,7 +11,8 @@ def _el(id_, guid, cat, typ, level, pars, vol=None, ref=None):
     p = dict(pars)
     if ref is not None:
         p["Тип"] = {"RefIdx": ref}
-    mats = {"m": {"Volume": vol, "Area": 1}} if vol else {}
+    mats = {"0": {"Material": pars.get("_mat", "Бетон В25 W6 F150"), "Volume": vol, "Area": 1}} if vol else {}
+    p.pop("_mat", None)
     return {"Id": id_, "Guid": guid, "Name": typ, "Type": typ, "Category": cat,
             "Meta": {"Element": {"Pars": p, "Level": {"Name": level, "Elevation": 0},
                                  "Boundings": {"Bottom": 0, "Top": 3000}, "Materials": mats}}}
@@ -20,8 +21,10 @@ def _el(id_, guid, cat, typ, level, pars, vol=None, ref=None):
 META_V1 = [
     {"Id": 900, "IsRef": True, "Meta": {"Element": {"Pars": {"Код по классификатору": "W-01", "Толщина": 200}}}},
     _el(1, "g1", "Стены", "Стена 200 мм", "Этаж 1", {"Марка": "B25"}, vol=2.5, ref=0),
-    _el(2, "g2", "Стены", "Стена 200 мм", "Этаж 1", {"Марка": ""}, vol=1.5, ref=0),
+    _el(2, "g2", "Стены", "Стена 200 мм", "Этаж 1", {"Марка": "", "_mat": "Бетон B30"}, vol=1.5, ref=0),
     _el(3, "g3", "Двери", "Дверь EI60", "Этаж 2", {}),
+    _el(5, "g5", "Камеры", "3D вид", "", {}),
+    _el(6, "g6", "Перекрытия", "Плита", "Этаж 2", {"_mat": "Бетон В25 W6 F150"}, vol=4.0),
 ]
 META_V2 = [META_V1[0], _el(1, "h1", "Стены", "Стена 250 мм", "Этаж 1", {"Марка": "B25"}, vol=2.5, ref=0),
            META_V1[3] | {"Guid": "h3"}, _el(4, "h4", "Окна", "Окно", "Этаж 2", {})]
@@ -30,7 +33,9 @@ META_V2 = [META_V1[0], _el(1, "h1", "Стены", "Стена 250 мм", "Эта
 @pytest.fixture
 def models(home):
     for vid, data in (("v1", META_V1), ("v2", META_V2)):
-        meta.write_parquet(meta.rows_from_meta(json.dumps(data)), meta.cache_path(vid))
+        meta.write_cache(vid, json.dumps(data))
+    Client().save_index({"v1": {"model": "Demo", "version": 1, "date": "2026-01-01", "elements": 5},
+                         "v2": {"model": "Demo", "version": 2, "date": "2026-02-01", "elements": 3}})
     return home
 
 
@@ -88,8 +93,8 @@ def test_is_read_only(sql, ok):
 
 
 def test_flatten_resolves_type_params():
-    rows = meta.rows_from_meta(json.dumps(META_V1))
-    assert len(rows) == 3
+    rows, mats = meta.rows_from_meta(json.dumps(META_V1))
+    assert len(rows) == 5 and len(mats) == 3
     assert rows[0]["pars"]["Код по классификатору"] == "W-01"
     assert rows[0]["pars"]["Марка"] == "B25"
     assert "Тип" not in rows[0]["pars"]
@@ -98,7 +103,8 @@ def test_flatten_resolves_type_params():
 
 def test_query(models):
     r = tools.query("v1", "SELECT category, count(*) n, sum(total_volume) v FROM elements GROUP BY 1 ORDER BY 1")
-    assert r["rows"] == [{"category": "Двери", "n": 1, "v": None}, {"category": "Стены", "n": 2, "v": 4.0}]
+    assert r["rows"][-1] == {"category": "Стены", "n": 2, "v": 4.0}
+    assert r["source"]["text"] == "модель «Demo», версия 1 от 2026-01-01"
     r = tools.query("v1", "SELECT id FROM elements WHERE json_extract_string(pars, '$.\"Код по классификатору\"') = 'W-01'")
     assert sorted(x["id"] for x in r["rows"]) == ["1", "2"]
 
@@ -118,13 +124,14 @@ def test_query_compare(models):
            "count(*) FILTER (WHERE e.id = p.id AND e.type <> p.type) changed "
            "FROM elements e FULL OUTER JOIN prev p ON e.id = p.id")
     r = tools.query("v2", sql, compare="v1")
-    assert r["rows"] == [{"added": 1, "removed": 1, "changed": 1}]
+    assert r["rows"] == [{"added": 1, "removed": 3, "changed": 1}]
 
 
 def test_model_schema(models):
     s = tools.model_schema("v1")
-    assert s["elements"] == 3
-    assert {c["category"] for c in s["categories"]} == {"Стены", "Двери"}
+    assert s["elements"] == 5 and s["service_elements"] == 1
+    assert {c["category"] for c in s["categories"]} == {"Стены", "Двери", "Камеры", "Перекрытия"}
+    assert {m["concrete_class"] for m in s["materials"]} == {"В25", "В30"}
     fill = {p["name"]: p["filled"] for p in s["parameters"]}
     assert fill["Код по классификатору"] == 2 and fill["Марка"] == 1
     assert s["link"].endswith("/v1")
@@ -154,3 +161,63 @@ def test_status_rejects_bad_token(home, monkeypatch):
     s = tools.status()
     assert s["auth_ok"] is False and not s["all_ok"]
     assert any("Персональные токены" in h for h in s["hints"])
+
+
+def test_concrete_by_level_and_class(models):
+    sql = ("SELECT level_name, concrete_class, round(sum(volume), 2) v FROM materials "
+           "WHERE category IN ('Стены', 'Перекрытия') GROUP BY ALL ORDER BY 1, 2")
+    r = tools.query("v1", sql)
+    assert r["rows"] == [{"level_name": "Этаж 1", "concrete_class": "В25", "v": 2.5},
+                         {"level_name": "Этаж 1", "concrete_class": "В30", "v": 1.5},
+                         {"level_name": "Этаж 2", "concrete_class": "В25", "v": 4.0}]
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("N Бетон В25 W6 F150", "В25"), ("Бетон B22,5", "В22,5"), ("Concrete B30", "В30"),
+    ("Бетон кл. В 15", "В15"), ("ЖБ В40", "В40"), ("Арматура A500C", None),
+    ("Кирпич М150", None), ("Бетон", None), ("Стекло B25", None),
+])
+def test_concrete_class(name, expected):
+    assert meta.concrete_class(name) == expected
+
+
+def test_service_filter(models):
+    r = tools.query("v1", "SELECT count(*) n FROM elements WHERE NOT service")
+    assert r["rows"] == [{"n": 4}]
+
+
+def test_compare_materials(models):
+    r = tools.query("v2", "SELECT (SELECT count(*) FROM materials) a, (SELECT count(*) FROM prev_materials) b", compare="v1")
+    assert r["rows"] == [{"a": 1, "b": 3}]
+    assert r["compare_source"]["version"] == 1
+
+
+def test_size_guard(home, monkeypatch):
+    c = Client()
+    c.save_index({"big": {"model": "Big", "version": 1, "elements": 400_000}})
+    called = []
+    monkeypatch.setattr(Client, "model_meta", lambda self, vid: called.append(vid))
+    with pytest.raises(meta.ModelTooLarge):
+        meta.ensure_cache(c, "big")
+    assert called == []
+    monkeypatch.setenv("TANGL_MAX_ELEMENTS", "500000")
+    meta.check_size({"elements": 400_000})
+
+
+def test_status_port(home, monkeypatch):
+    import socket
+
+    seen = []
+    monkeypatch.setattr(socket, "create_connection", lambda addr, timeout=0: seen.append(addr) or type("S", (), {"close": lambda self: None})())
+    monkeypatch.setenv("TANGL_AUTH_URL", "http://127.0.0.1:8765")
+    monkeypatch.setenv("TANGL_API_URL", "https://tangl.local")
+    s = tools.status()
+    assert s["network_ok"] and sorted(seen) == [("127.0.0.1", 8765), ("tangl.local", 443)]
+
+
+def test_clean(models):
+    config.save({"TANGL_TOKEN": "x"})
+    r = tools.clean()
+    assert r["removed_files"] >= 4 and config.CREDENTIALS_FILE.exists()
+    tools.clean(everything=True)
+    assert not config.CREDENTIALS_FILE.exists()

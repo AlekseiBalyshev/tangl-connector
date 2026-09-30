@@ -204,5 +204,52 @@ class Client:
             text = lzma.decompress(base64.b64decode(json.loads(content))).decode("utf-8")
         return _fix_trailing_comma(text)
 
+    def _index_file(self):
+        return config.CACHE_DIR / f"versions_{self._identity()}.json"
+
+    def load_index(self) -> dict:
+        try:
+            return json.loads(self._index_file().read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def save_index(self, entries: dict):
+        index = self.load_index()
+        index.update(entries)
+        try:
+            config.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            self._index_file().write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+
+    @staticmethod
+    def index_entries(model: dict, company: str = "") -> dict:
+        return {
+            v.get("id"): {
+                "model": model.get("name"),
+                "model_id": model.get("id"),
+                "version": v.get("versionIndex"),
+                "sw": model.get("sw"),
+                "date": v.get("date"),
+                "company": company,
+                "elements": v.get("elementsCount") or v.get("totalElementsCount"),
+            }
+            for v in model.get("versions") or [] if v.get("id")
+        }
+
+    def version_info(self, version_id: str) -> dict:
+        info = self.load_index().get(version_id)
+        if info:
+            return info
+        entries = {}
+        for cid in self.company_ids():
+            try:
+                for m in self.models(cid):
+                    entries.update(self.index_entries(m, cid))
+            except TanglError:
+                continue
+        self.save_index(entries)
+        return entries.get(version_id) or {}
+
     def viewer_url(self, version_id: str) -> str:
         return self.cfg["TANGL_MODEL_URL"].replace("{version_id}", version_id)

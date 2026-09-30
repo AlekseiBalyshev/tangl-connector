@@ -197,7 +197,7 @@ def test_size_guard(home, monkeypatch):
     c.save_index({"big": {"model": "Big", "version": 1, "elements": 400_000}})
     called = []
     monkeypatch.setattr(Client, "model_meta", lambda self, vid: called.append(vid))
-    with pytest.raises(meta.ModelTooLarge):
+    with pytest.raises(meta.ModelTooLarge, match="400 000 элементов – больше, чем"):
         meta.ensure_cache(c, "big")
     assert called == []
     monkeypatch.setenv("TANGL_MAX_ELEMENTS", "500000")

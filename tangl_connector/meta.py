@@ -189,13 +189,16 @@ def max_elements() -> int:
         return DEFAULT_MAX_ELEMENTS
 
 
+def _n(x: int) -> str:
+    return f"{x:,}".replace(",", " ")
+
+
 def check_size(info: dict):
     n = (info or {}).get("elements") or 0
     if n > max_elements():
         raise ModelTooLarge(
-            f"В версии {n:,} элементов – больше, чем помещается в память среды ({max_elements():,}). "
+            f"В версии {_n(n)} элементов – больше, чем помещается в память среды ({_n(max_elements())}). "
             "Выбери модель отдельного раздела или секции, а не сводную."
-            .replace(",", " ")
         )
 
 

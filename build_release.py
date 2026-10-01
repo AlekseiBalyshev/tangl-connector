@@ -124,6 +124,34 @@ def build_pdf(version: str, out: Path):
     return path
 
 
+INSTALL = """## Установка в 4 шага
+
+Нужен платный тариф Claude (Pro, Max, Team или Enterprise) и учётная запись Tangl.
+
+1. **Токен.** В Tangl откройте «Персональные токены» → «Создать токен», скопируйте токен и сохраните в текстовый файл `tangl.env` одной строкой: `TANGL_TOKEN=ваш_токен`
+2. **Настройки Claude.** [Settings → Capabilities](https://claude.ai/settings/capabilities): включите *Code execution and file creation* и *Allow network egress*, добавьте домены `auth.tangl.cloud` и `platform.tangl.cloud`.
+3. **Навык.** Скачайте `{zip}` ниже, в разделе *Assets*, и загрузите: Settings → Capabilities → Skills → *Upload skill*.
+4. **Проект.** Создайте проект в Claude, добавьте в его файлы `tangl.env` и спросите: *«Проверь подключение к Tangl»*.
+
+Подробная инструкция с примерами – `{pdf}` ниже или [USER_GUIDE.md](https://github.com/AlekseiBalyshev/tangl-connector/blob/main/USER_GUIDE.md).
+"""
+
+
+def changelog_section(version: str) -> str:
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    m = re.search(rf"^## v{re.escape(version)}\b.*?$\n(.*?)(?=^## v|\Z)", text, re.M | re.S)
+    if not m:
+        raise SystemExit(f"no CHANGELOG section for v{version}")
+    return m.group(1).strip()
+
+
+def release_notes(version: str) -> str:
+    zip_name = f"{SKILL_NAME}-skill-v{version}.zip"
+    pdf_name = f"{SKILL_NAME}-user-guide-v{version}.pdf"
+    return (INSTALL.format(zip=zip_name, pdf=pdf_name)
+            + "\n## Что нового\n\n" + changelog_section(version) + "\n")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", required=True)
@@ -150,6 +178,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     made = [build_zip(a.version, out), build_pdf(a.version, out)]
     shutil.copy(ROOT / "CHANGELOG.md", out / "CHANGELOG.md")
+    (out / "RELEASE_NOTES.md").write_text(release_notes(a.version), encoding="utf-8")
     for p in filter(None, made):
         print(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p)
 

@@ -1,0 +1,22 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dir=$(ls -d releases/${GITHUB_REF_NAME}_* | head -1)
+          test -n "$dir" && test -f "$dir/RELEASE_NOTES.md"
+          version="${GITHUB_REF_NAME#v}"
+          grep -q "__version__ = \"$version\"" tangl_connector/__init__.py
+          gh release create "$GITHUB_REF_NAME" "$dir"/*.zip "$dir"/*.pdf \
+            --title "Tangl Connector $GITHUB_REF_NAME" \
+            --notes-file "$dir/RELEASE_NOTES.md" --latest

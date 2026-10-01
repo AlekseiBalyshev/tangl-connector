@@ -24,3 +24,9 @@ def test_skill_zip_contents(tmp_path):
     assert "tangl-connector/SKILL.md" in names
     assert "tangl-connector/tangl_connector/tools.py" in names
     assert not any(n.startswith("tangl-connector/tests") for n in names)
+
+
+def test_release_notes():
+    notes = br.release_notes("1.0.0")
+    assert "tangl-connector-skill-v1.0.0.zip" in notes and "## Что нового" in notes
+    assert "materials" in notes

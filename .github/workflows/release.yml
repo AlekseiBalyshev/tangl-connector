@@ -1,7 +1,9 @@
 name: release
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: ["releases/**", ".github/workflows/release.yml"]
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -9,14 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Publish GitHub release
+      - name: Publish GitHub release for the newest releases/ folder
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          dir=$(ls -d releases/${GITHUB_REF_NAME}_* | head -1)
-          test -n "$dir" && test -f "$dir/RELEASE_NOTES.md"
-          version="${GITHUB_REF_NAME#v}"
-          grep -q "__version__ = \"$version\"" tangl_connector/__init__.py
-          gh release create "$GITHUB_REF_NAME" "$dir"/*.zip "$dir"/*.pdf \
-            --title "Tangl Connector $GITHUB_REF_NAME" \
+          dir=$(ls -d releases/v*_* | sort -V | tail -1)
+          test -f "$dir/RELEASE_NOTES.md"
+          tag=$(basename "$dir" | cut -d_ -f1)
+          grep -q "__version__ = \"${tag#v}\"" tangl_connector/__init__.py
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists"; exit 0
+          fi
+          gh release create "$tag" "$dir"/*.zip "$dir"/*.pdf \
+            --target "$GITHUB_SHA" \
+            --title "Tangl Connector $tag" \
             --notes-file "$dir/RELEASE_NOTES.md" --latest

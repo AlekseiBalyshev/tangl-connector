@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+*.env
+!tangl.env.example
+.stopwords
+dist/
+.pytest_cache/

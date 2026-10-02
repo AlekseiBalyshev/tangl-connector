@@ -155,7 +155,7 @@ def write_parquet(rows: list, path: Path, columns: dict = None):
     import duckdb
 
     columns = columns or COLUMNS
-    path.parent.mkdir(parents=True, exist_ok=True)
+    config.ensure_dirs()
     ndjson = path.with_suffix(".ndjson")
     with open(ndjson, "w", encoding="utf-8") as f:
         for r in rows:

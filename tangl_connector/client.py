@@ -84,7 +84,7 @@ class Client:
 
     def _save_cached(self):
         try:
-            config.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            config.ensure_dirs()
             f = self._cache_file()
             f.write_text(json.dumps({"access_token": self.token, "expires_at": self.expiry}), encoding="utf-8")
             os.chmod(f, 0o600)
@@ -217,7 +217,7 @@ class Client:
         index = self.load_index()
         index.update(entries)
         try:
-            config.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            config.ensure_dirs()
             self._index_file().write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass

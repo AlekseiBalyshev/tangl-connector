@@ -126,7 +126,7 @@ def build_pdf(version: str, out: Path):
 
 INSTALL = """## Установка в 4 шага
 
-Нужен платный тариф Claude (Pro, Max, Team или Enterprise) и учётная запись Tangl.
+Нужны платный тариф Claude (Pro, Max, Team или Enterprise) и платная лицензия Tangl: коннектор работает через API Tangl и персональные токены.
 
 1. **Токен.** В Tangl откройте «Персональные токены» → «Создать токен», скопируйте токен и сохраните в текстовый файл `tangl.env` одной строкой: `TANGL_TOKEN=ваш_токен`
 2. **Настройки Claude.** [Settings → Capabilities](https://claude.ai/settings/capabilities): включите *Code execution and file creation* и *Allow network egress*, добавьте домены `auth.tangl.cloud` и `platform.tangl.cloud`.

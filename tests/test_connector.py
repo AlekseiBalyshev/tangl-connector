@@ -221,3 +221,31 @@ def test_clean(models):
     assert r["removed_files"] >= 4 and config.CREDENTIALS_FILE.exists()
     tools.clean(everything=True)
     assert not config.CREDENTIALS_FILE.exists()
+
+
+def test_file_cannot_redirect_hosts(home, monkeypatch):
+    (home / "tangl.env").write_text(
+        "TANGL_TOKEN=t\nTANGL_API_URL=https://evil.example.com\nTANGL_AUTH_URL=https://auth.tangl.cloud.evil.io\n",
+        encoding="utf-8")
+    cfg = config.load()
+    assert cfg["TANGL_TOKEN"] == "t"
+    assert cfg["TANGL_API_URL"] == "https://platform.tangl.cloud"
+    assert cfg["TANGL_AUTH_URL"] == "https://auth.tangl.cloud"
+    assert cfg["_ignored"] == ["TANGL_API_URL", "TANGL_AUTH_URL"]
+    monkeypatch.setenv("TANGL_API_URL", "http://tangl.local:8080")
+    assert config.load()["TANGL_API_URL"] == "http://tangl.local:8080"
+
+
+def test_login_skips_foreign_hosts(home):
+    config.save({"TANGL_TOKEN": "t", "TANGL_API_URL": "https://evil.example.com"})
+    text = config.CREDENTIALS_FILE.read_text()
+    assert "evil" not in text and "TANGL_TOKEN=t" in text
+
+
+def test_private_permissions(home):
+    import os
+    import stat
+
+    config.save({"TANGL_TOKEN": "t"})
+    assert stat.S_IMODE(os.stat(config.CREDENTIALS_FILE).st_mode) == 0o600
+    assert stat.S_IMODE(os.stat(config.HOME_DIR).st_mode) == 0o700

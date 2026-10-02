@@ -9,7 +9,8 @@
 
 ## Установка в 4 шага
 
-Нужен платный тариф Claude (Pro, Max, Team или Enterprise) и учётная запись Tangl.
+Нужны платный тариф Claude (Pro, Max, Team или Enterprise) и платная лицензия Tangl:
+коннектор работает через API Tangl и персональные токены.
 
 1. **Токен.** В Tangl откройте «Персональные токены» → «Создать токен»,
    скопируйте токен и сохраните в текстовый файл `tangl.env` одной строкой:
@@ -54,7 +55,8 @@
 Tangl Connector is a read-only Claude skill for the [Tangl](https://tangl.cloud)
 BIM platform. Ask about your models in plain language: find a model, count
 elements and concrete volumes by level and strength class, check empty
-parameters, compare two versions. To install, create a personal token in
+parameters, compare two versions. A paid Claude plan and a paid Tangl
+license are required. To install, create a personal token in
 Tangl and save `TANGL_TOKEN=…` to a `tangl.env` file. In Claude (paid plan),
 enable code execution and network egress for `auth.tangl.cloud` and
 `platform.tangl.cloud`. Upload the skill zip from the

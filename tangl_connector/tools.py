@@ -39,6 +39,10 @@ def status() -> dict:
             socket.create_connection((host, port), timeout=8).close()
         except OSError:
             out["network_ok"] = False
+    out["hosts"] = _hosts(cfg)
+    if cfg.get("_ignored"):
+        out["hints"].append("В файле с данными для входа указаны адреса серверов не из tangl.cloud ("
+                            + ", ".join(cfg["_ignored"]) + "): они пропущены, используется облако Tangl.")
     if not out["network_ok"]:
         out["hints"].append(
             "Нет выхода в сеть к " + ", ".join(_hosts(cfg)) + ". Добавь эти адреса в список "
@@ -92,7 +96,7 @@ def login(text: str = "", file: str = "") -> dict:
         return {"error": "в тексте нет строк вида TANGL_...=значение"}
     path = config.save(values)
     result = status()
-    result["saved_keys"] = sorted(values)
+    result["saved_keys"] = sorted(k for k in values if k not in config.URL_KEYS or config.trusted_url(values[k]))
     result["saved_to"] = str(path)
     return result
 

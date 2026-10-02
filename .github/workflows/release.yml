@@ -11,18 +11,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Publish GitHub release for the newest releases/ folder
+      - name: Publish GitHub releases for releases/ folders without one
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          dir=$(ls -d releases/v*_* | sort -V | tail -1)
-          test -f "$dir/RELEASE_NOTES.md"
-          tag=$(basename "$dir" | cut -d_ -f1)
-          grep -q "__version__ = \"${tag#v}\"" tangl_connector/__init__.py
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "release $tag already exists"; exit 0
-          fi
-          gh release create "$tag" "$dir"/*.zip "$dir"/*.pdf \
-            --target "$GITHUB_SHA" \
-            --title "Tangl Connector $tag" \
-            --notes-file "$dir/RELEASE_NOTES.md" --latest
+          newest=$(ls -d releases/v*_* | sort -V | tail -1)
+          grep -q "__version__ = \"$(basename "$newest" | cut -d_ -f1 | tr -d v)\"" tangl_connector/__init__.py
+          for dir in $(ls -d releases/v*_* | sort -V); do
+            tag=$(basename "$dir" | cut -d_ -f1)
+            test -f "$dir/RELEASE_NOTES.md" || { echo "skip $dir: no RELEASE_NOTES.md"; continue; }
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "release $tag already exists"; continue
+            fi
+            latest=--latest=false
+            [ "$dir" = "$newest" ] && latest=--latest
+            gh release create "$tag" "$dir"/*.zip "$dir"/*.pdf \
+              --target "$GITHUB_SHA" \
+              --title "Tangl Connector $tag" \
+              --notes-file "$dir/RELEASE_NOTES.md" $latest
+          done
